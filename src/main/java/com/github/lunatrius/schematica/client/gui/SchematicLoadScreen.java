@@ -121,10 +121,18 @@ public class SchematicLoadScreen extends Screen {
         }
         try {
             String display = this.directory.relativize(path).toString().replace('\\', '/');
-            SchematicState.instance().loadFrom(path, display);
+            SchematicState state = SchematicState.instance();
+            state.loadFrom(path, display);
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
-                mc.player.sendSystemMessage(Component.literal("Loaded schematic: " + display));
+                com.github.lunatrius.schematica.api.ISchematic schematic = state.schematic();
+                int blocks = schematic instanceof com.github.lunatrius.schematica.world.schematic.Schematic concrete
+                        ? concrete.countNonAir() : -1;
+                mc.player.sendSystemMessage(Component.literal("Loaded schematic: " + display
+                        + " at " + state.position().toShortString()
+                        + " (" + schematic.getWidth() + "x" + schematic.getHeight() + "x"
+                        + schematic.getLength() + ", " + blocks + " blocks)"
+                        + " — player at " + mc.player.blockPosition().toShortString()));
             }
             this.onClose();
         } catch (IOException e) {

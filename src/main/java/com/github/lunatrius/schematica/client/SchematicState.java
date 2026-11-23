@@ -313,7 +313,8 @@ public final class SchematicState {
         if (this.pointA == null || this.pointB == null) {
             return false;
         }
-        SchematicManager.save(fileName, SchematicWorld.capture(level, this.pointA, this.pointB));
+        SchematicManager.save(fileName, SchematicWorld.capture(level,
+                this.pointA.offset(this.position), this.pointB.offset(this.position)));
         return true;
     }
 }

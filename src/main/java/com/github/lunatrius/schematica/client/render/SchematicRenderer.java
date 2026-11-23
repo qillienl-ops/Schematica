@@ -55,23 +55,23 @@ public final class SchematicRenderer {
     }
 
     private static void emitGuides(SchematicState state) {
+        BlockPos origin = state.position();
         if (state.pointA() != null) {
-            Gizmos.cuboid(box(state.pointA()), GizmoStyle.stroke(POINT_A_COLOR, 2.0F))
-                    .setAlwaysOnTop();
+            Gizmos.cuboid(box(state.pointA().offset(origin)),
+                    GizmoStyle.stroke(POINT_A_COLOR, 2.0F)).setAlwaysOnTop();
         }
         if (state.pointB() != null) {
-            Gizmos.cuboid(box(state.pointB()), GizmoStyle.stroke(POINT_B_COLOR, 2.0F))
-                    .setAlwaysOnTop();
+            Gizmos.cuboid(box(state.pointB().offset(origin)),
+                    GizmoStyle.stroke(POINT_B_COLOR, 2.0F)).setAlwaysOnTop();
         }
         if (state.showGuide() && state.pointA() != null && state.pointB() != null) {
-            BlockPos a = state.pointA();
-            BlockPos b = state.pointB();
+            BlockPos a = state.pointA().offset(origin);
+            BlockPos b = state.pointB().offset(origin);
             Gizmos.cuboid(new AABB(a.getX(), a.getY(), a.getZ(),
                             b.getX() + 1.0, b.getY() + 1.0, b.getZ() + 1.0).inflate(1.0),
                     GizmoStyle.stroke(SELECTION_COLOR, 2.0F)).setAlwaysOnTop();
         }
         if (state.schematic() != null) {
-            BlockPos origin = state.position();
             BlockPos end = origin.offset(state.schematic().getWidth() - 1,
                     state.schematic().getHeight() - 1, state.schematic().getLength() - 1);
             Gizmos.cuboid(new AABB(origin.getX(), origin.getY(), origin.getZ(),
@@ -86,8 +86,8 @@ public final class SchematicRenderer {
         BlockPos center = mc.player.blockPosition();
         int alpha = Config.ALPHA_ENABLED.get()
                 ? Math.max(16, Math.min(255, (int) Math.round(Config.ALPHA.get() * 255.0)))
-                : 0xC0;
-        int fillAlpha = Math.max(0x20, alpha / 2);
+                : 0xFF;
+        int fillAlpha = Config.ALPHA_ENABLED.get() ? Math.max(0x20, alpha / 2) : 0x99;
         int placed = 0;
         int max = 1500;
 
@@ -167,8 +167,11 @@ public final class SchematicRenderer {
                     displayer.addPriorityLine("Blocks: "
                             + (state.schematic().getWidth() * state.schematic().getHeight()
                             * state.schematic().getLength()));
-                    displayer.addPriorityLine("Ghosts drawn: "
-                            + drawnBlocks + (state.isHidden() ? " (hidden)" : ""));
+                    displayer.addPriorityLine("Ghosts drawn: " + drawnBlocks
+                            + (state.isHidden() ? " (schematic hidden)"
+                            : drawnBlocks == 0 ? " (none in range/layer)" : ""));
+                    displayer.addPriorityLine("Player: "
+                            + Minecraft.getInstance().player.blockPosition().toShortString());
                 });
     }
 }

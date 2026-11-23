@@ -49,6 +49,7 @@
   "config.schematica.render.renderDistance": "Render distance",
   "config.schematica.render.alphaEnabled": "Alpha enabled",
   "config.schematica.render.alpha": "Overlay opacity",
+  "config.schematica.render.texturedGhosts": "Textured ghost blocks",
   "config.schematica.render.highlight": "Highlight differences",
   "config.schematica.render.highlightAir": "Highlight extra blocks",
   "config.schematica.render.blockDelta": "Highlight block delta",

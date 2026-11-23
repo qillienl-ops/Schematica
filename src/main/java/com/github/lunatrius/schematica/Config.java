@@ -27,6 +27,10 @@ public final class Config {
             .comment("Opacity of the schematic overlay (1.0 = opaque).")
             .defineInRange("render.alpha", 1.0D, 0.0D, 1.0D);
 
+    public static final ModConfigSpec.BooleanValue TEXTURED_GHOSTS = BUILDER
+            .comment("Draw schematic ghosts with real block models instead of plain colored cubes.")
+            .define("render.texturedGhosts", true);
+
     public static final ModConfigSpec.BooleanValue HIGHLIGHT = BUILDER
             .comment("Highlight blocks that differ from the schematic.")
             .define("render.highlight", true);

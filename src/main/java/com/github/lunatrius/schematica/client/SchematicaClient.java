@@ -65,6 +65,8 @@ public final class SchematicaClient {
     public SchematicaClient(IEventBus modEventBus, ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         modEventBus.addListener(com.github.lunatrius.schematica.client.render.SchematicRenderer::registerDebug);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                com.github.lunatrius.schematica.client.render.SchematicRenderer::submitGhostBlocks);
     }
 
     private static KeyMapping unbound(String name) {

@@ -69,7 +69,11 @@ public final class SchematicManager {
     }
 
     public static void save(String name, ISchematic schematic) throws IOException {
-        SchematicFormats.write(resolve(name), schematic, SchematicFormats.FORMAT_ALPHA);
+        save(name, schematic, SchematicFormats.FORMAT_ALPHA);
+    }
+
+    public static void save(String name, ISchematic schematic, String format) throws IOException {
+        SchematicFormats.write(resolve(name), schematic, format);
     }
 
     public static boolean delete(String name) throws IOException {

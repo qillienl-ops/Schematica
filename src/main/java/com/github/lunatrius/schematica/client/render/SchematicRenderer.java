@@ -3,6 +3,7 @@ package com.github.lunatrius.schematica.client.render;
 import com.github.lunatrius.schematica.Config;
 import com.github.lunatrius.schematica.client.SchematicState;
 import com.github.lunatrius.schematica.reference.Reference;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.QuadInstance;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockTintSource;
@@ -10,6 +11,8 @@ import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gizmos.GizmoStyle;
@@ -18,6 +21,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -47,6 +51,7 @@ public final class SchematicRenderer {
     private static final int MISSING_BLOCK_COLOR = 0x00BFFF;
 
     private static volatile int drawnBlocks;
+    private static volatile int drawnQuads;
 
     private SchematicRenderer() {}
 
@@ -119,9 +124,9 @@ public final class SchematicRenderer {
                     }
                     AABB box = box(worldPos).deflate(delta);
                     if (Config.TEXTURED_GHOSTS.get()) {
-                        // The real block model is submitted in submitGhostBlocks();
-                        // keep only a thin colored outline so differences stay visible.
-                        Gizmos.cuboid(box, GizmoStyle.stroke(argb(rgb, alpha), 1.5F));
+                        // Classic Schematica draws a translucent filled cuboid over the
+                        // textured ghost when the world differs (alpha 0x3F).
+                        Gizmos.cuboid(box, GizmoStyle.fill(argb(rgb, 0x3F)));
                     } else {
                         Gizmos.cuboid(box, GizmoStyle.strokeAndFill(
                                 argb(rgb, alpha), 1.5F, argb(rgb, fillAlpha)));
@@ -168,8 +173,12 @@ public final class SchematicRenderer {
     }
 
     /**
-     * Classic Schematica ghost: the real block textures, translucent, full-bright,
-     * with the original mismatch colors drawn as outlines by emitSchematic().
+     * Classic Schematica ghost: every schematic block is drawn with its real model and
+     * texture, translucent and full-bright. The mismatch colors are filled cuboids on
+     * top (see emitSchematic), exactly like the 1.12.2 RenderOverlay.
+     *
+     * Important: the level pose is camera-relative. Vanilla's submitTransientBlocks()
+     * translates by (blockPos - camera.pos) before submitting, so we must do the same.
      */
     @SubscribeEvent
     public static void submitGhostBlocks(SubmitCustomGeometryEvent event) {
@@ -181,35 +190,53 @@ public final class SchematicRenderer {
         }
 
         SubmitNodeCollector collector = event.getSubmitNodeCollector();
+        Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;
+        if (camera == null) {
+            return;
+        }
         int alpha = Config.ALPHA_ENABLED.get()
                 ? Math.max(16, Math.min(255, (int) Math.round(Config.ALPHA.get() * 255.0)))
                 : 0x80;
 
         BlockPos center = mc.player.blockPosition();
-        int distance = Math.min(Config.RENDER_DISTANCE.get(), 8);
+        int distance = Math.min(Config.RENDER_DISTANCE.get(), 12);
+        Map<BlockState, List<BakedQuad>> quads = new HashMap<>();
         List<BlockPos> targets = new ArrayList<>();
-        for (int dx = -distance; dx <= distance && targets.size() < 600; dx++) {
-            for (int dy = -distance; dy <= distance && targets.size() < 600; dy++) {
-                for (int dz = -distance; dz <= distance && targets.size() < 600; dz++) {
+        for (int dx = -distance; dx <= distance && targets.size() < 1200; dx++) {
+            for (int dy = -distance; dy <= distance && targets.size() < 1200; dy++) {
+                for (int dz = -distance; dz <= distance && targets.size() < 1200; dz++) {
                     BlockPos worldPos = center.offset(dx, dy, dz);
-                    BlockState expected = state.renderStateAt(worldPos);
-                    if (!state.isExtraAir(expected)) {
+                    if (!state.isExtraAir(state.renderStateAt(worldPos))) {
                         targets.add(worldPos);
                     }
                 }
             }
         }
 
-        Map<BlockState, List<net.minecraft.client.resources.model.geometry.BakedQuad>> quads = new HashMap<>();
-        collector.submitCustomGeometry(event.getPoseStack(), net.minecraft.client.renderer.rendertype.RenderTypes.translucentMovingBlock(),
+        int[] submitted = { 0 };
+        collector.submitCustomGeometry(event.getPoseStack(), RenderTypes.translucentMovingBlock(),
                 (pose, consumer) -> {
+                    PoseStack stack = new PoseStack();
+                    stack.mulPose(pose.pose());
                     QuadInstance instance = new QuadInstance();
                     instance.setLightCoords(0x00F000F0);
                     instance.setOverlayCoords(0);
                     for (BlockPos worldPos : targets) {
                         BlockState expected = state.renderStateAt(worldPos);
-                        for (net.minecraft.client.resources.model.geometry.BakedQuad quad :
-                                quads.computeIfAbsent(expected, key -> quadsFor(mc, key))) {
+                        List<BakedQuad> blockQuads = quads.computeIfAbsent(expected,
+                                key -> quadsFor(mc, key));
+                        if (blockQuads.isEmpty()) {
+                            continue;
+                        }
+                        stack.pushPose();
+                        stack.translate(worldPos.getX() - camera.x, worldPos.getY() - camera.y,
+                                worldPos.getZ() - camera.z);
+                        for (BakedQuad quad : blockQuads) {
+                            Direction side = quad.direction();
+                            if (side != null
+                                    && !state.isExtraAir(state.renderStateAt(worldPos.relative(side)))) {
+                                continue; // hidden face between two schematic blocks
+                            }
                             int tint = quad.materialInfo().tintIndex();
                             int color = 0xFFFFFF;
                             if (tint >= 0) {
@@ -220,16 +247,17 @@ public final class SchematicRenderer {
                                 }
                             }
                             instance.setColor(argb(color, alpha));
-                            consumer.putBlockBakedQuad(worldPos.getX(), worldPos.getY(),
-                                    worldPos.getZ(), quad, instance);
+                            consumer.putBakedQuad(stack.last(), quad, instance);
+                            submitted[0]++;
                         }
+                        stack.popPose();
                     }
                 });
+        drawnQuads = submitted[0];
     }
 
-    private static List<net.minecraft.client.resources.model.geometry.BakedQuad> quadsFor(
-            Minecraft mc, BlockState blockState) {
-        List<net.minecraft.client.resources.model.geometry.BakedQuad> result = new ArrayList<>();
+    private static List<BakedQuad> quadsFor(Minecraft mc, BlockState blockState) {
+        List<BakedQuad> result = new ArrayList<>();
         BlockStateModel model = mc.getModelManager().getBlockStateModelSet().get(blockState);
         if (model == null) {
             return result;
@@ -240,6 +268,7 @@ public final class SchematicRenderer {
             for (Direction direction : Direction.values()) {
                 result.addAll(part.getQuads(direction));
             }
+            result.addAll(part.getQuads(null)); // unculled faces (crosses, plants, ...)
         }
         return result;
     }
@@ -266,6 +295,7 @@ public final class SchematicRenderer {
                     displayer.addPriorityLine("Ghosts drawn: " + drawnBlocks
                             + (state.isHidden() ? " (schematic hidden)"
                             : drawnBlocks == 0 ? " (none in range/layer)" : ""));
+                    displayer.addPriorityLine("Ghost quads: " + drawnQuads);
                     displayer.addPriorityLine("Player: "
                             + Minecraft.getInstance().player.blockPosition().toShortString());
                 });

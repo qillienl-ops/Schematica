@@ -1,0 +1,19 @@
+{
+  "mod.schematica.name": "Schematica",
+  "key.category.schematica.general": "Schematica",
+  "key.schematica.load": "Load / print schematic",
+  "key.schematica.printer": "Stop printer",
+  "key.schematica.list": "List schematics",
+  "gui.schematica.load.title": "Load schematic",
+  "gui.schematica.load.name": "Schematic file name",
+  "gui.schematica.load.print": "Print here",
+  "gui.schematica.load.hint": "Enter the name of a file in your schematics folder:",
+  "config.schematica.renderDistance": "Render distance",
+  "config.schematica.alpha": "Overlay opacity",
+  "config.schematica.highlight": "Highlight differences",
+  "config.schematica.printerEnabled": "Printer enabled",
+  "config.schematica.saveEnabled": "Saving enabled",
+  "config.schematica.loadEnabled": "Loading enabled",
+  "config.schematica.placeDelay": "Place delay",
+  "config.schematica.schematicDirectory": "Schematic directory"
+}

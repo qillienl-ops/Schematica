@@ -120,6 +120,37 @@ public final class SchematicaCommands {
                             return 1;
                         })));
 
+        root.then(Commands.literal("blockat")
+                .then(Commands.argument("x", com.mojang.brigadier.arguments.IntegerArgumentType.integer())
+                        .then(Commands.argument("y", com.mojang.brigadier.arguments.IntegerArgumentType.integer())
+                                .then(Commands.argument("z", com.mojang.brigadier.arguments.IntegerArgumentType.integer())
+                                        .executes(ctx -> {
+                                            ServerLevel level = ctx.getSource().getLevel();
+                                            BlockPos pos = new BlockPos(intArg(ctx, "x"), intArg(ctx, "y"), intArg(ctx, "z"));
+                                            level.getChunk(pos.getX() >> 4, pos.getZ() >> 4);
+                                            net.minecraft.world.level.block.state.BlockState state = level.getBlockState(pos);
+                                            send(ctx, "Block at " + pos + " = "
+                                                    + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()));
+                                            return 1;
+                                        })))));
+
+        root.then(Commands.literal("inspect")
+                .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .executes(ctx -> {
+                            try {
+                                ISchematic schematic = SchematicManager.load(stringArg(ctx, "name"));
+                                int nonAir = schematic instanceof Schematic concrete ? concrete.countNonAir() : -1;
+                                send(ctx, "Inspect " + schematic.getWidth() + "x" + schematic.getHeight() + "x"
+                                        + schematic.getLength() + " nonAir=" + nonAir
+                                        + " icon=" + schematic.getIcon().getItem()
+                                        + " author=" + schematic.getAuthor());
+                            } catch (Exception e) {
+                                fail(ctx, "Inspect failed: " + e.getMessage());
+                                return 0;
+                            }
+                            return 1;
+                        })));
+
         root.then(Commands.literal("selftest").executes(ctx -> {
             try {
                 Schematic source = new Schematic(2, 2, 2);

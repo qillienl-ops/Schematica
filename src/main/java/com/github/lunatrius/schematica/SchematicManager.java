@@ -50,8 +50,22 @@ public final class SchematicManager {
         return names;
     }
 
+    /** Resolves a name, adding the default extension when the user omitted it. */
+    private static Path existingPath(String name) throws IOException {
+        Path path = resolve(name);
+        if (Files.exists(path) || name.endsWith(".schematic") || name.endsWith(".nbt")) {
+            return path;
+        }
+        Path schematic = resolve(name + ".schematic");
+        if (Files.exists(schematic)) {
+            return schematic;
+        }
+        Path structure = resolve(name + ".nbt");
+        return Files.exists(structure) ? structure : path;
+    }
+
     public static ISchematic load(String name) throws IOException {
-        return SchematicFormats.read(resolve(name));
+        return SchematicFormats.read(existingPath(name));
     }
 
     public static void save(String name, ISchematic schematic) throws IOException {
@@ -59,7 +73,7 @@ public final class SchematicManager {
     }
 
     public static boolean delete(String name) throws IOException {
-        return Files.deleteIfExists(resolve(name));
+        return Files.deleteIfExists(existingPath(name));
     }
 
     public static String sizeDescription(String name) {

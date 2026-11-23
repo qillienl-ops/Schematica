@@ -86,9 +86,9 @@ public final class SchematicPrinter {
                 }
 
                 BlockPos worldPos = origin.offset(x, y, z);
-                if (currentLevel.setBlock(worldPos, state, 3)) {
-                    placed++;
-                }
+                currentLevel.getChunk(worldPos.getX() >> 4, worldPos.getZ() >> 4);
+                currentLevel.setBlock(worldPos, state, 3);
+                placed++;
                 CompoundTag tag = current.getBlockEntity(localPos);
                 if (tag != null) {
                     CompoundTag copy = tag.copy();

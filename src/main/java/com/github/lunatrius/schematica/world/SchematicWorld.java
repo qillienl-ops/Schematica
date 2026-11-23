@@ -62,9 +62,9 @@ public final class SchematicWorld {
                         continue;
                     }
                     BlockPos worldPos = origin.offset(x, y, z);
-                    if (level.setBlock(worldPos, state, 3)) {
-                        placed++;
-                    }
+                    level.getChunk(worldPos.getX() >> 4, worldPos.getZ() >> 4);
+                    level.setBlock(worldPos, state, 3);
+                    placed++;
                     CompoundTag tag = schematic.getBlockEntity(localPos);
                     if (tag != null) {
                         CompoundTag copy = tag.copy();

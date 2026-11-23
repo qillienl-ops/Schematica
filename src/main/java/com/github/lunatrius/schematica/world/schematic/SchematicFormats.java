@@ -114,7 +114,9 @@ public final class SchematicFormats {
         }
 
         byte[] blocks = root.getByteArray(TAG_BLOCKS).orElse(new byte[0]);
-        byte[] add = root.getByteArray("Add").orElse(new byte[0]);
+        byte[] metadata = root.getByteArray(TAG_DATA).orElse(new byte[0]);
+        // 1.12.2 Schematica writes "AddBlocks"; MCEdit writes "Add".
+        byte[] add = root.getByteArray("AddBlocks").orElseGet(() -> root.getByteArray("Add").orElse(new byte[0]));
 
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
@@ -132,15 +134,17 @@ public final class SchematicFormats {
                             id |= (index % 2 == 0 ? high : low) << 8;
                         }
                     }
+                    int meta = index < metadata.length ? metadata[index] & 0xF : 0;
 
                     BlockState state = null;
-                    if (id >= 0 && id < palette.size()) {
+                    if (!palette.isEmpty() && id >= 0 && id < palette.size()) {
+                        // Files written by this port store the complete state string.
                         state = parseState(palette.get(id));
                     }
                     if (state == null) {
                         String name = legacyNames.get(id);
                         if (name != null) {
-                            state = stateFromName(name);
+                            state = stateFromNameAndMeta(name, meta);
                         }
                     }
                     if (state != null) {
@@ -345,6 +349,62 @@ public final class SchematicFormats {
         return list;
     }
 
+    private static final String[] DYE_COLORS = {
+            "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
+            "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"
+    };
+    private static final String[] LOG_TYPES = {"oak", "spruce", "birch", "jungle"};
+    private static final String[] PLANK_TYPES = {
+            "oak", "spruce", "birch", "jungle", "acacia", "dark_oak"
+    };
+    private static final String[] STONE_VARIANTS = {
+            "minecraft:stone", "minecraft:granite", "minecraft:smooth_granite",
+            "minecraft:diorite", "minecraft:smooth_diorite", "minecraft:andesite",
+            "minecraft:smooth_andesite"
+    };
+
+    /**
+     * 1.12.2 stored one numeric block ID plus 4 bits of metadata per block.
+     * The mapping table only gives us the block name; this restores the most
+     * common metadata families (dye colors, wood, stone) to modern states.
+     */
+    private static BlockState stateFromNameAndMeta(String name, int meta) {
+        String base = name.startsWith("minecraft:") ? name.substring("minecraft:".length()) : name;
+        int color = meta & 0xF;
+        String resolved = null;
+
+        switch (base) {
+            case "wool" -> resolved = "minecraft:" + DYE_COLORS[color] + "_wool";
+            case "stained_glass" -> resolved = "minecraft:" + DYE_COLORS[color] + "_stained_glass";
+            case "stained_glass_pane" -> resolved = "minecraft:" + DYE_COLORS[color] + "_stained_glass_pane";
+            case "stained_hardened_clay" -> resolved = "minecraft:" + DYE_COLORS[color] + "_terracotta";
+            case "hardened_clay" -> resolved = "minecraft:terracotta";
+            case "carpet" -> resolved = "minecraft:" + DYE_COLORS[color] + "_carpet";
+            case "concrete" -> resolved = "minecraft:" + DYE_COLORS[color] + "_concrete";
+            case "concrete_powder" -> resolved = "minecraft:" + DYE_COLORS[color] + "_concrete_powder";
+            case "log" -> resolved = "minecraft:" + LOG_TYPES[color & 3] + "_log";
+            case "log2" -> resolved = "minecraft:" + (color < 2 ? "acacia" : "dark_oak") + "_log";
+            case "planks" -> resolved = "minecraft:" + PLANK_TYPES[color % PLANK_TYPES.length] + "_planks";
+            case "stone" -> resolved = STONE_VARIANTS[color % STONE_VARIANTS.length];
+            case "quartz_block" -> resolved = switch (color) {
+                case 1 -> "minecraft:chiseled_quartz_block";
+                case 2 -> "minecraft:quartz_pillar";
+                default -> "minecraft:quartz_block";
+            };
+            default -> { }
+        }
+
+        BlockState state = stateFromName(resolved != null ? resolved : name);
+        if (state != null && (base.equals("log") || base.equals("log2"))) {
+            Property<?> axis = state.getBlock().getStateDefinition().getProperty("axis");
+            if (axis != null) {
+                int axisMeta = (meta >> 2) & 3;
+                state = setProperty(state, axis, axisMeta == 1 ? "x" : axisMeta == 2 ? "z" : "y");
+            }
+        }
+        return state;
+    }
+
     private static BlockState stateFromName(String name) {
         if (name == null || name.isEmpty()) {
             return null;
@@ -396,7 +456,7 @@ public final class SchematicFormats {
         return tag;
     }
 
-    private static BlockState parseState(String serialized) {
+    public static BlockState parseState(String serialized) {
         if (serialized == null || serialized.isEmpty()) {
             return null;
         }

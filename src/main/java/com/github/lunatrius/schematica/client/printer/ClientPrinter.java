@@ -46,20 +46,32 @@ public final class ClientPrinter {
 
     public static void start() {
         if (!SchematicState.instance().isLoaded()) {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                mc.player.sendSystemMessage(Component.literal("No schematic loaded"));
-            }
+            message("No schematic loaded");
             return;
         }
         active = true;
         tickCounter = 0;
-        BLACKLIST.clear();
+        refresh();
+        message("Printer: ON");
     }
 
     public static void stop() {
         active = false;
+        refresh();
+        message("Printer: OFF");
+    }
+
+    /** Clears stale placement state; called whenever the schematic changes. */
+    public static void refresh() {
+        tickCounter = 0;
         BLACKLIST.clear();
+    }
+
+    private static void message(String text) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.sendSystemMessage(Component.literal(text));
+        }
     }
 
     public static void tick(Minecraft mc) {
@@ -72,12 +84,14 @@ public final class ClientPrinter {
             entry.setValue(remaining);
             return remaining <= 0;
         });
-        if (++tickCounter < Math.max(1, Config.PLACE_DELAY.get())) {
+        int delay = Math.max(0, Config.PLACE_DELAY.get());
+        if (++tickCounter <= delay) {
             return;
         }
         tickCounter = 0;
 
-        int budget = Config.PLACE_INSTANTLY.get() ? 8 : 1;
+        // Legacy "placeInstantly" means every block that can be placed this tick.
+        int budget = Config.PLACE_INSTANTLY.get() ? 64 : 1;
         List<BlockPos> candidates = candidates(mc);
         int placed = 0;
         for (BlockPos pos : candidates) {
@@ -133,12 +147,12 @@ public final class ClientPrinter {
     private static boolean placeAt(Minecraft mc, BlockPos pos) {
         SchematicState state = SchematicState.instance();
         BlockState expected = state.renderStateAt(pos);
-        ItemStack required = new ItemStack(expected.getBlock().asItem());
+        LocalPlayer player = mc.player;
+        ItemStack required = requiredItem(expected, pos, player);
         if (required.isEmpty() || required.getItem() instanceof BucketItem) {
             return false;
         }
 
-        LocalPlayer player = mc.player;
         BlockState actual = mc.level.getBlockState(pos);
         if (!actual.isAir() && !actual.canBeReplaced() && Config.DESTROY_BLOCKS.get()
                 && mc.gameMode.getPlayerMode() == GameType.CREATIVE) {
@@ -205,13 +219,31 @@ public final class ClientPrinter {
             placed = mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, hit).consumesAction();
         } finally {
             ItemStack remaining = inventory.getItem(hotbarSlot).copy();
-            inventory.setItem(hotbarSlot, previous);
             if (sourceSlot >= 9) {
+                // Restore the hotbar and move the consumed stack back into storage.
+                inventory.setItem(hotbarSlot, previous);
                 inventory.setItem(sourceSlot, remaining);
+            } else {
+                // The item came from this very hotbar slot: keep the consumed stack,
+                // otherwise the printer never uses up items (and desyncs multiplayer).
+                inventory.setItem(hotbarSlot, remaining);
             }
             inventory.setSelectedSlot(previousSelected);
         }
         return placed;
+    }
+
+    /**
+     * The old printer used BlockStateToItemStack (pick-block) so oriented blocks,
+     * signs, heads, etc. kept their item/NBT. {@code asItem()} loses all of that.
+     */
+    public static ItemStack requiredItem(BlockState state, BlockPos pos, net.minecraft.world.entity.player.Player player) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) {
+            return new ItemStack(state.getBlock().asItem());
+        }
+        ItemStack picked = state.getCloneItemStack(pos, mc.level, false, player);
+        return picked.isEmpty() ? new ItemStack(state.getBlock().asItem()) : picked;
     }
 
     private static BlockHitResult findHit(BlockPos target, Minecraft mc) {

@@ -90,6 +90,10 @@ public final class SchematicaCommands {
 
     private static ArgumentBuilder<CommandSourceStack, ?> saveArguments() {
         return Commands.argument("name", StringArgumentType.string()).then(saveCoordinates(ctx -> {
+            if (!Config.SAVE_ENABLED.get()) {
+                fail(ctx, "Saving schematics is disabled in the config");
+                return 0;
+            }
             String name = stringArg(ctx, "name");
             String format = optionalStringArg(ctx, "format", "alpha");
             boolean structure = "structure".equalsIgnoreCase(format);
@@ -115,6 +119,10 @@ public final class SchematicaCommands {
 
     private static ArgumentBuilder<CommandSourceStack, ?> pasteArguments() {
         return Commands.argument("name", StringArgumentType.string()).then(position(0, ctx -> {
+            if (!Config.LOAD_ENABLED.get()) {
+                fail(ctx, "Loading schematics is disabled in the config");
+                return 0;
+            }
             try {
                 ISchematic schematic = SchematicManager.load(stringArg(ctx, "name"));
                 BlockPos origin = new BlockPos(intArg(ctx, "x"), intArg(ctx, "y"), intArg(ctx, "z"));
@@ -130,6 +138,10 @@ public final class SchematicaCommands {
 
     private static ArgumentBuilder<CommandSourceStack, ?> printArguments() {
         return Commands.argument("name", StringArgumentType.string()).then(position(0, ctx -> {
+            if (!Config.PRINTER_ENABLED.get()) {
+                fail(ctx, "The printer is disabled in the config");
+                return 0;
+            }
             try {
                 ISchematic schematic = SchematicManager.load(stringArg(ctx, "name"));
                 BlockPos origin = new BlockPos(intArg(ctx, "x"), intArg(ctx, "y"), intArg(ctx, "z"));

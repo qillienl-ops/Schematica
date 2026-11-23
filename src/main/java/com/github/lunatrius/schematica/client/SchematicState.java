@@ -83,6 +83,7 @@ public final class SchematicState {
 
     public void setPosition(BlockPos position) {
         this.position = position;
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public LayerMode layerMode() {
@@ -91,6 +92,7 @@ public final class SchematicState {
 
     public void setLayerMode(LayerMode layerMode) {
         this.layerMode = layerMode;
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public int renderingLayer() {
@@ -102,6 +104,7 @@ public final class SchematicState {
             return;
         }
         this.renderingLayer = Math.max(0, Math.min(layer, this.schematic.getHeight() - 1));
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public boolean isHidden() {
@@ -148,6 +151,9 @@ public final class SchematicState {
     }
 
     private void setLoaded(ISchematic loaded, String displayName) {
+        if (Config.DUMP_BLOCK_LIST.get()) {
+            this.dumpBlockList(loaded, displayName);
+        }
         this.schematic = loaded;
         this.name = displayName;
         this.position = BlockPos.ZERO;
@@ -162,6 +168,7 @@ public final class SchematicState {
         if (mc.player != null) {
             this.position = mc.player.blockPosition();
         }
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public void unload() {
@@ -169,10 +176,12 @@ public final class SchematicState {
         this.name = "";
         this.pointA = null;
         this.pointB = null;
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public void moveHere(BlockPos pos) {
         this.position = pos;
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public String flipLabel() {
@@ -182,6 +191,7 @@ public final class SchematicState {
     public void cycleFlip(boolean forced) {
         Direction[] values = Direction.values();
         this.flipIndex = this.flipIndex < 0 ? 0 : (this.flipIndex + (forced ? 1 : 2)) % values.length;
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     public String rotateLabel() {
@@ -191,6 +201,7 @@ public final class SchematicState {
     public void cycleRotate(boolean forced) {
         Direction[] values = Direction.values();
         this.rotateIndex = this.rotateIndex < 0 ? 0 : (this.rotateIndex + (forced ? 1 : 2)) % values.length;
+        com.github.lunatrius.schematica.client.printer.ClientPrinter.refresh();
     }
 
     private BlockPos localFromWorld(BlockPos worldPos) {
@@ -279,7 +290,9 @@ public final class SchematicState {
                     if (isExtraAir(state)) {
                         continue;
                     }
-                    ItemStack stack = new ItemStack(state.getBlock().asItem());
+                    BlockPos pos = new BlockPos(x, y, z);
+                    ItemStack stack = com.github.lunatrius.schematica.client.printer.ClientPrinter
+                            .requiredItem(state, pos, Minecraft.getInstance().player);
                     if (stack.isEmpty()) {
                         continue;
                     }
@@ -288,7 +301,12 @@ public final class SchematicState {
             }
         }
         List<Map.Entry<ItemStack, Integer>> result = new ArrayList<>(counts.entrySet());
+        // Legacy stores "" for the default and ItemStackSortType.fromString("")
+        // resolves to NAME_ASC, so an empty value must still sort by name.
         String sort = Config.SORT_TYPE.get();
+        if (sort == null || sort.isEmpty()) {
+            sort = "nameAsc";
+        }
         Comparator<Map.Entry<ItemStack, Integer>> comparator = null;
         if ("nameAsc".equals(sort) || "nameDesc".equals(sort)) {
             comparator = Comparator.comparing(entry -> entry.getKey().getHoverName().getString());
@@ -307,6 +325,33 @@ public final class SchematicState {
 
     public String sortLabel() {
         return Config.SORT_TYPE.get();
+    }
+
+    /** Legacy debug.dumpBlockList: one line per distinct state, with its count. */
+    private void dumpBlockList(ISchematic schematic, String displayName) {
+        try {
+            java.nio.file.Path dir = java.nio.file.Path.of("dumps");
+            java.nio.file.Files.createDirectories(dir);
+            Map<String, Integer> counts = new LinkedHashMap<>();
+            for (int x = 0; x < schematic.getWidth(); x++) {
+                for (int y = 0; y < schematic.getHeight(); y++) {
+                    for (int z = 0; z < schematic.getLength(); z++) {
+                        BlockState state = schematic.getBlockState(new BlockPos(x, y, z));
+                        if (isExtraAir(state)) {
+                            continue;
+                        }
+                        counts.merge(String.valueOf(state), 1, Integer::sum);
+                    }
+                }
+            }
+            StringBuilder out = new StringBuilder("# ").append(displayName).append('\n');
+            counts.forEach((name, count) -> out.append(name).append(',').append(count).append('\n'));
+            java.nio.file.Files.writeString(dir.resolve("schematica-blocks.txt"),
+                    out.toString(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            com.github.lunatrius.schematica.Schematica.LOGGER.warn(
+                    "Could not dump block list for {}", displayName, e);
+        }
     }
 
     public boolean captureSelection(Level level, String fileName) throws IOException {
